@@ -1,0 +1,123 @@
+//============================================================
+// Simple game core
+//  - Ship position & facing
+//  - One bullet, 4 cardinal directions
+//  - Updated once per frame using frame_tick
+//============================================================
+module game_core_simple (
+    input        clk,
+    input        reset_n,
+    input        frame_tick,  // 1 pulse per frame
+
+    input        btn_up,
+    input        btn_down,
+    input        btn_left,
+    input        btn_right,
+    input        btn_fire,
+
+    output reg [9:0] ship_x,
+    output reg [9:0] ship_y,
+    output reg [1:0] ship_facing,   // 00=up, 01=right, 10=down, 11=left
+
+    output reg [9:0] bullet_x,
+    output reg [9:0] bullet_y,
+    output reg       bullet_active
+);
+
+    localparam SCREEN_W   = 640;
+    localparam SCREEN_H   = 480;
+    localparam SHIP_SPEED = 2;      // pixels per frame
+    localparam BULLET_SPEED = 4;    // faster than ship
+
+    // Initialize near center
+    always @(posedge clk or negedge reset_n) begin
+        if (!reset_n) begin
+            ship_x        <= SCREEN_W / 2;
+            ship_y        <= SCREEN_H / 2;
+            ship_facing   <= 2'b00;   // up
+            bullet_x      <= 10'd0;
+            bullet_y      <= 10'd0;
+            bullet_active <= 1'b0;
+        end else if (frame_tick) begin
+            //------------------------------------------------
+            // Ship movement & facing
+            //------------------------------------------------
+            // Priority: only one direction per frame if multiple pressed
+            if (btn_up) begin
+                ship_facing <= 2'b00;
+                if (ship_y > SHIP_SPEED)
+                    ship_y <= ship_y - SHIP_SPEED;
+                else
+                    ship_y <= 10'd0;
+            end else if (btn_down) begin
+                ship_facing <= 2'b10;
+                if (ship_y < SCREEN_H - SHIP_SPEED - 1)
+                    ship_y <= ship_y + SHIP_SPEED;
+                else
+                    ship_y <= SCREEN_H - 1;
+            end else if (btn_right) begin
+                ship_facing <= 2'b01;
+                if (ship_x < SCREEN_W - SHIP_SPEED - 1)
+                    ship_x <= ship_x + SHIP_SPEED;
+                else
+                    ship_x <= SCREEN_W - 1;
+            end else if (btn_left) begin
+                ship_facing <= 2'b11;
+                if (ship_x > SHIP_SPEED)
+                    ship_x <= ship_x - SHIP_SPEED;
+                else
+                    ship_x <= 10'd0;
+            end
+
+            //------------------------------------------------
+            // Bullet logic: one bullet at a time
+            //------------------------------------------------
+            if (!bullet_active) begin
+                // Start new bullet if fire pressed
+                if (btn_fire) begin
+                    bullet_active <= 1'b1;
+                    bullet_x      <= ship_x;
+                    bullet_y      <= ship_y;
+                end
+            end else begin
+                // Move active bullet
+                case (ship_facing)
+                    2'b00: begin // up
+                        if (bullet_y > BULLET_SPEED)
+                            bullet_y <= bullet_y - BULLET_SPEED;
+                        else begin
+                            bullet_y      <= 10'd0;
+                            bullet_active <= 1'b0;
+                        end
+                    end
+                    2'b10: begin // down
+                        if (bullet_y < SCREEN_H - BULLET_SPEED - 1)
+                            bullet_y <= bullet_y + BULLET_SPEED;
+                        else begin
+                            bullet_y      <= SCREEN_H - 1;
+                            bullet_active <= 1'b0;
+                        end
+                    end
+                    2'b01: begin // right
+                        if (bullet_x < SCREEN_W - BULLET_SPEED - 1)
+                            bullet_x <= bullet_x + BULLET_SPEED;
+                        else begin
+                            bullet_x      <= SCREEN_W - 1;
+                            bullet_active <= 1'b0;
+                        end
+                    end
+                    2'b11: begin // left
+                        if (bullet_x > BULLET_SPEED)
+                            bullet_x <= bullet_x - BULLET_SPEED;
+                        else begin
+                            bullet_x      <= 10'd0;
+                            bullet_active <= 1'b0;
+                        end
+                    end
+                    default: ; // no-op
+                endcase
+            end
+        end
+    end
+
+endmodule
