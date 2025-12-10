@@ -1,0 +1,134 @@
+//============================================================
+// Simple Asteroids-style testbed
+//  - 640x480 VGA @ 60 Hz
+//  - Black background
+//  - One circular "ship" that moves with buttons
+//  - Bullet fired in 4 cardinal directions, 1 at a time
+//============================================================
+module asteroids_top (
+    input        CLOCK_50,        // 50 MHz board clock
+    input        reset_n,         // active-low reset (button)
+
+    // Simple GPIO controller (active high)
+    input        btn_up,
+    input        btn_down,
+    input        btn_left,
+    input        btn_right,
+    input        btn_fire,
+
+    // VGA outputs (adjust width to match your board)
+    output [3:0] VGA_R,
+    output [3:0] VGA_G,
+    output [3:0] VGA_B,
+    output       VGA_HS,
+    output       VGA_VS
+);
+
+    //========================================================
+    // 25 MHz pixel clock (simple divide-by-2 from 50 MHz)
+    //========================================================
+    reg pix_clk_reg;
+
+    always @(posedge CLOCK_50 or negedge reset_n) begin
+        if (!reset_n)
+            pix_clk_reg <= 1'b0;
+        else
+            pix_clk_reg <= ~pix_clk_reg;
+    end
+
+    wire pix_clk = pix_clk_reg;
+
+    //========================================================
+    // VGA timing generator
+    //========================================================
+    wire [9:0] pixel_x;
+    wire [9:0] pixel_y;
+    wire       video_on;
+    wire       frame_tick;   // 1-clock pulse at top-left each frame
+    wire       hsync;
+    wire       vsync;
+
+    vga_sync_640x480 vga_inst (
+        .clk        (pix_clk),
+        .reset_n    (reset_n),
+        .hsync      (hsync),
+        .vsync      (vsync),
+        .pixel_x    (pixel_x),
+        .pixel_y    (pixel_y),
+        .video_on   (video_on),
+        .frame_tick (frame_tick)
+    );
+
+    assign VGA_HS = hsync;
+    assign VGA_VS = vsync;
+
+    //========================================================
+    // Game core: ship & bullet positions (cardinal directions)
+    //========================================================
+    wire [9:0] ship_x;
+    wire [9:0] ship_y;
+
+    wire [9:0] bullet_x;
+    wire [9:0] bullet_y;
+    wire       bullet_active;
+    wire [1:0] ship_facing; // 00=up, 01=right, 10=down, 11=left
+
+    game_core_simple core_inst (
+        .clk          (pix_clk),
+        .reset_n      (reset_n),
+        .frame_tick   (frame_tick),
+
+        .btn_up       (btn_up),
+        .btn_down     (btn_down),
+        .btn_left     (btn_left),
+        .btn_right    (btn_right),
+        .btn_fire     (btn_fire),
+
+        .ship_x       (ship_x),
+        .ship_y       (ship_y),
+        .ship_facing  (ship_facing),
+
+        .bullet_x     (bullet_x),
+        .bullet_y     (bullet_y),
+        .bullet_active(bullet_active)
+    );
+
+    //========================================================
+    // Simple renderer: black background, white ship (circle),
+    // and white bullet pixel
+    //========================================================
+    reg [2:0] rgb; // {R,G,B} one bit each
+
+    // Circle radius for the ship
+    localparam integer SHIP_R  = 10;
+    localparam integer SHIP_R2 = SHIP_R * SHIP_R;
+
+    // signed deltas for circle test
+    wire signed [10:0] dx = $signed({1'b0, pixel_x}) - $signed({1'b0, ship_x});
+    wire signed [10:0] dy = $signed({1'b0, pixel_y}) - $signed({1'b0, ship_y});
+
+    wire [21:0] dist2 = dx*dx + dy*dy;
+
+    wire ship_pixel  = (dist2 <= SHIP_R2);
+    wire bullet_pixel = bullet_active &&
+                        (pixel_x == bullet_x) &&
+                        (pixel_y == bullet_y);
+
+    always @* begin
+        // Default: black background
+        rgb = 3'b000;
+
+        if (video_on) begin
+            // Ship and bullet drawn in white
+            if (ship_pixel || bullet_pixel) begin
+                rgb = 3'b111; // white
+            end
+        end
+    end
+
+    // Expand 1-bit per channel into 4 bits for DAC
+    assign VGA_R = {4{rgb[2]}};
+    assign VGA_G = {4{rgb[1]}};
+    assign VGA_B = {4{rgb[0]}};
+
+endmodule
