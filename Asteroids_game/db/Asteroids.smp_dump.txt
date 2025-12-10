@@ -1,6 +1,0 @@
-
-State Machine - |asteroids_top|ui_state
-Name ui_state.ST_TITLE ui_state.ST_GAMEOVER ui_state.ST_PLAY 
-ui_state.ST_TITLE 0 0 0 
-ui_state.ST_PLAY 1 0 1 
-ui_state.ST_GAMEOVER 1 1 0 
